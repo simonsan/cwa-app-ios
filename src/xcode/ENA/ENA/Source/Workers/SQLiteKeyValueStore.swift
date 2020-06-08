@@ -42,11 +42,11 @@ class SQLiteKeyValueStore {
 	private func initDatabase(_ key: String, retry: Bool) {
 		var noDatabaseAccess = false
 		databaseQueue?.inDatabase { db in
-			let dbhandle = OpaquePointer(db.sqliteHandle)
-			guard sqlite3_key(dbhandle, key, Int32(key.count)) == SQLITE_OK else {
-				logError(message: "Unable to set Key")
-				return
-			}
+//			let dbhandle = OpaquePointer(db.sqliteHandle)
+//			guard sqlite3_key(dbhandle, key, Int32(key.count)) == SQLITE_OK else {
+//				logError(message: "Unable to set Key")
+//				return
+//			}
 			let sqlStmt = """
 			PRAGMA auto_vacuum=2;
 
@@ -80,7 +80,7 @@ class SQLiteKeyValueStore {
 	private func getData(for key: String) -> Data? {
 		openDbIfNeeded()
 
-		var dataToReturn:Data?
+		var dataToReturn: Data?
 		databaseQueue?.inDatabase {db in
 			do {
 				let query = "SELECT value FROM kv WHERE key = ?;"

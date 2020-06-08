@@ -162,8 +162,7 @@ private extension DynamicCell {
 		.exposureDetectionCell(ReusableCellIdentifer.riskRefresh) { viewController, cell, _ in
 			let state = viewController.state
 			cell.backgroundColor = state.riskTintColor
-			let components = Calendar.current.dateComponents([.minute, .second], from: Date(), to: state.nextRefresh ?? Date())
-			cell.textLabel?.text = String(format: text, components.minute ?? 0, components.second ?? 0)
+			cell.textLabel?.text = "Aktualisierung alle 24 Stunden"
 		}
 	}
 
@@ -239,8 +238,7 @@ extension ExposureDetectionViewController {
 			isHidden: { viewController in
 				guard let state = (viewController as? ExposureDetectionViewController)?.state else { return true }
 				if state.isLoading { return true }
-				if state.nextRefresh == nil { return true }
-				return state.mode != .automatic
+				return state.detectionMode != .automatic
 			},
 			cells: [
 				.riskRefresh(text: AppStrings.ExposureDetection.refreshingIn)

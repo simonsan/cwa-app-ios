@@ -56,7 +56,7 @@ enum RiskCalculation {
 		- currentDate: The current `Date` to use in checks. Defaults to `Date()`
 	*/
 	private static func riskLevel(
-		summary: ENExposureDetectionSummaryContainer?,
+		summary: CodableExposureDetectionSummary?,
 		configuration: SAP_ApplicationConfiguration,
 		dateLastExposureDetection: Date?,
 		numberOfTracingActiveHours: Int, // Get this from the `TracingStatusHistory`
@@ -64,9 +64,8 @@ enum RiskCalculation {
 		currentDate: Date = Date()
 	) -> Result<RiskLevel, RiskLevelCalculationError> {
 		var riskLevel = RiskLevel.low
-
 		DispatchQueue.main.async {
-			let appDelegate = UIApplication.shared.delegate as? AppDelegate  // TODO: Remove
+			let appDelegate = UIApplication.shared.delegate as? AppDelegate // TODO: Remove
 			appDelegate?.lastRiskCalculation = ""  // Reset; Append from here on
 			appDelegate?.lastRiskCalculation.append("configuration: \(configuration)\n")
 			appDelegate?.lastRiskCalculation.append("numberOfTracingActiveHours: \(numberOfTracingActiveHours)\n")
@@ -136,7 +135,7 @@ enum RiskCalculation {
 	/// Performs the raw risk calculation without checking any preconditions
 	/// - returns: weighted risk score
 	static func calculateRawRisk(
-		summary: ENExposureDetectionSummaryContainer,
+		summary: CodableExposureDetectionSummary,
 		configuration: SAP_ApplicationConfiguration
 	) -> Double {
 		let maximumRisk = summary.maximumRiskScoreFullRange
@@ -170,13 +169,13 @@ enum RiskCalculation {
 	}
 
 	static func risk(
-		summary: ENExposureDetectionSummaryContainer?,
+		summary: CodableExposureDetectionSummary?,
 		configuration: SAP_ApplicationConfiguration,
 		dateLastExposureDetection: Date?,
 		numberOfTracingActiveHours: Int,
 		preconditions: ExposureManagerState,
 		currentDate: Date = Date(),
-		previousSummary: ENExposureDetectionSummaryContainer?
+		previousSummary: CodableExposureDetectionSummary?
 	) -> Risk? {
 		switch riskLevel(
 			summary: summary,
@@ -208,7 +207,7 @@ enum RiskCalculation {
 				appDelegate?.lastRiskCalculation.append("details: \(details)\n")
 				appDelegate?.lastRiskCalculation.append("summary: \(String(describing: summary?.description))\n")
 			}
-
+			
 			return Risk(
 				level: level,
 				details: details,

@@ -21,54 +21,13 @@ import FMDB
 import UIKit
 
 protocol CoronaWarnAppDelegate: AnyObject {
-	func appStartExposureDetectionTransaction()
 	var client: Client { get }
 	var downloadedPackagesStore: DownloadedPackagesStore { get }
 	var store: Store { get }
-	var taskScheduler: ENATaskScheduler { get }
 	var riskProvider: RiskProvider { get }
 	var exposureManager: ExposureManager { get }
+	var taskScheduler: ENATaskScheduler { get }
 	var lastRiskCalculation: String { get set } // TODO: REMOVE ME
-}
-
-protocol RequiresAppDependencies {
-	var client: Client { get }
-	var store: Store { get }
-	var taskScheduler: ENATaskScheduler { get }
-	var downloadedPackagesStore: DownloadedPackagesStore { get }
-	var riskProvider: RiskProvider { get }
-	var exposureManager: ExposureManager { get }
-	var lastRiskCalculation: String { get }  // TODO: REMOVE ME
-}
-
-extension RequiresAppDependencies {
-	var client: Client {
-		UIApplication.coronaWarnDelegate().client
-	}
-
-	var downloadedPackagesStore: DownloadedPackagesStore {
-		UIApplication.coronaWarnDelegate().downloadedPackagesStore
-	}
-
-	var store: Store {
-		UIApplication.coronaWarnDelegate().store
-	}
-
-	var taskScheduler: ENATaskScheduler {
-		UIApplication.coronaWarnDelegate().taskScheduler
-	}
-
-	var riskProvider: RiskProvider {
-		UIApplication.coronaWarnDelegate().riskProvider
-	}
-
-	var lastRiskCalculation: String {
-		UIApplication.coronaWarnDelegate().lastRiskCalculation
-	}
-
-	var exposureManager: ExposureManager {
-		UIApplication.coronaWarnDelegate().exposureManager
-	}
 }
 
 extension AppDelegate: ExposureSummaryProvider {
@@ -88,15 +47,21 @@ extension AppDelegate: ExposureSummaryProvider {
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 	private let consumer = RiskConsumer()
-	let taskScheduler = ENATaskScheduler.shared
+	let taskScheduler: ENATaskScheduler = ENATaskScheduler.shared
+
 	lazy var riskProvider: RiskProvider = {
-		var duration = DateComponents()
-		duration.day = 1
+		var validityDuration = DateComponents()
+		validityDuration.day = 2
+
+		var detectionInterval = DateComponents()
+		detectionInterval.day = 1
 
 		let config = RiskProvidingConfiguration(
-			updateMode: .automatic,
-			exposureDetectionValidityDuration: duration
+			exposureDetectionValidityDuration: validityDuration,
+			exposureDetectionInterval: detectionInterval,
+			detectionMode: .default
 		)
+
 		return RiskProvider(
 			configuration: config,
 			store: self.store,
@@ -200,6 +165,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 	// TODO: REMOVE ME
 	var lastRiskCalculation: String = ""
 
+//	private lazy var exposureDetectionExecutor: ExposureDetectionExecutor = {
+//		ExposureDetectionExecutor(
+//			client: self.client,
+//			downloadedPackagesStore: self.downloadedPackagesStore,
+//			store: self.store,
+//			exposureDetector: self.exposureManager
+//		)
+//	}()
+
 	func application(
 		_: UIApplication,
 		didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -207,9 +181,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 		UIDevice.current.isBatteryMonitoringEnabled = true
 
 		taskScheduler.taskDelegate = self
+		taskScheduler.scheduleBackgroundTaskRequests()
+		NotificationCenter.default.addObserver(self, selector: #selector(handleN), name: UIApplication.backgroundRefreshStatusDidChangeNotification, object: nil)
 		riskProvider.observeRisk(consumer)
 
 		return true
+	}
+	@objc
+	func handleN() {
+		let mode: DetectionMode = UIApplication.shared.backgroundRefreshStatus == UIBackgroundRefreshStatus.available ? .automatic : .manual
+		print("❤️❤️❤️❤️ mode: \(mode)")
+		guard let scene = UIApplication.shared.connectedScenes.first else { fatalError(); return }
+		guard let delegate = scene.delegate as? SceneDelegate else { fatalError(); return }
+		delegate.state.detectionMode = mode
+		riskProvider.configuration.detectionMode = mode
 	}
 
 	// MARK: UISceneSession Lifecycle
@@ -225,90 +210,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 	func application(_: UIApplication, didDiscardSceneSessions _: Set<UISceneSession>) {}
 }
 
-extension AppDelegate: ExposureDetectionDelegate {
-	func exposureDetection(_ detection: ExposureDetection, determineAvailableData completion: @escaping (DaysAndHours?) -> Void) {
-		client.availableDaysAndHoursUpUntil(.formattedToday()) { result in
-			let mappedResult = result.map { DaysAndHours(days: $0.days, hours: $0.hours) }
-			switch mappedResult {
-			case .success(let daysAndHours):
-				completion(daysAndHours)
-			case .failure:
-				completion(nil)
-			}
-		}
-	}
-
-	func exposureDetection(_ detection: ExposureDetection, downloadDeltaFor remote: DaysAndHours) -> DaysAndHours {
-		let delta = DeltaCalculationResult(
-			remoteDays: Set(remote.days),
-			remoteHours: Set(remote.hours),
-			localDays: Set(downloadedPackagesStore.allDays()),
-			localHours: Set(downloadedPackagesStore.hours(for: .formattedToday()))
-		)
-		return (
-			days: Array(delta.missingDays),
-			hours: Array(delta.missingHours)
-		)
-	}
-
-	func exposureDetection(_ detection: ExposureDetection, downloadAndStore delta: DaysAndHours, completion: @escaping (Error?) -> Void) {
-		func storeDaysAndHours(_ fetchedDaysAndHours: FetchedDaysAndHours) {
-			downloadedPackagesStore.addFetchedDaysAndHours(fetchedDaysAndHours)
-			completion(nil)
-		}
-		client.fetchDays(
-			delta.days,
-			hours: delta.hours,
-			of: .formattedToday(),
-			completion: storeDaysAndHours
-		)
-	}
-
-	func exposureDetection(_ detection: ExposureDetection, downloadConfiguration completion: @escaping (ENExposureConfiguration?) -> Void) {
-		client.exposureConfiguration(completion: completion)
-	}
-
-	func exposureDetectionWriteDownloadedPackages(_ detection: ExposureDetection) -> WrittenPackages? {
-		let fileManager = FileManager()
-		let rootDir = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		do {
-			try fileManager.createDirectory(at: rootDir, withIntermediateDirectories: true, attributes: nil)
-			let packages = downloadedPackagesStore.allPackages(for: .formattedToday(), onlyHours: store.hourlyFetchingEnabled)
-			let writer = AppleFilesWriter(rootDir: rootDir, keyPackages: packages)
-			return writer.writeAllPackages()
-		} catch {
-			return nil
-		}
-	}
-
-	func exposureDetection(
-		_ detection: ExposureDetection,
-		detectSummaryWithConfiguration
-		configuration: ENExposureConfiguration,
-		writtenPackages: WrittenPackages,
-		completion: @escaping (Result<ENExposureDetectionSummary, Error>) -> Void
-	) {
-		func withResultFrom(
-			summary: ENExposureDetectionSummary?,
-			error: Error?
-		) -> Result<ENExposureDetectionSummary, Error> {
-			if let error = error {
-				return .failure(error)
-			}
-			if let summary = summary {
-				return .success(summary)
-			}
-			fatalError("invalid state")
-		}
-		_ = exposureManager.detectExposures(
-			configuration: configuration,
-			diagnosisKeyURLs: writtenPackages.urls
-		) { summary, error in
-			completion(withResultFrom(summary: summary, error: error))
-		}
-	}
-}
-
 extension AppDelegate: CoronaWarnAppDelegate {
 	private func useSummaryDetectionResult(
 		_ result: Result<ENExposureDetectionSummary, ExposureDetection.DidEndPrematurelyReason>
@@ -316,12 +217,7 @@ extension AppDelegate: CoronaWarnAppDelegate {
 		exposureDetection = nil
 		switch result {
 		case .success(let summary):
-			store.dateLastExposureDetection = Date()
-			NotificationCenter.default.post(
-				name: .didDetectExposureDetectionSummary,
-				object: nil,
-				userInfo: ["summary": summary]
-			)
+			store.summary = SummaryMetadata(detectionSummary: summary)
 		case .failure(let reason):
 			logError(message: "Exposure transaction failed: \(reason)")
 
@@ -377,46 +273,25 @@ extension AppDelegate: CoronaWarnAppDelegate {
 			exposureDetection == nil,
 			"An Exposure Transaction is currently already running. This should never happen."
 		)
+
 		exposureDetection = ExposureDetection(
 			delegate: self
 		)
+
 		exposureDetection?.start(completion: useSummaryDetectionResult)
 	}
 }
 
-extension DownloadedPackagesStore {
-	func addFetchedDaysAndHours(_ daysAndHours: FetchedDaysAndHours) {
-		let days = daysAndHours.days
-		days.bucketsByDay.forEach { day, bucket in
-			self.set(day: day, package: bucket)
-		}
-
-		let hours = daysAndHours.hours
-		hours.bucketsByHour.forEach { hour, bucket in
-			self.set(hour: hour, day: hours.day, package: bucket)
-		}
-	}
-}
-
-private extension DownloadedPackagesStore {
-	func allPackages(for day: String, onlyHours: Bool) -> [SAPDownloadedPackage] {
-		var packages = [SAPDownloadedPackage]()
-
-		if onlyHours {  // Testing only: Feed last three hours into framework
-			let allHoursForToday = hourlyPackages(for: .formattedToday())
-			packages.append(contentsOf: Array(allHoursForToday.prefix(3)))
-		} else {
-			let fullDays = allDays()
-			packages.append(
-				contentsOf: fullDays.map { package(for: $0) }.compactMap { $0 }
-			)
-		}
-
-		return packages
-	}
-}
-
 extension AppDelegate: ENATaskExecutionDelegate {
+	func taskScheduler(_ scheduler: ENATaskScheduler, didScheduleTasksSuccessfully success: Bool) {
+		let mode: DetectionMode = success ? .automatic : .manual
+print("❤️❤️❤️❤️ mode: \(mode)")
+		guard let scene = UIApplication.shared.connectedScenes.first else { return }
+		guard let delegate = scene.delegate as? SceneDelegate else { return }
+		delegate.state.detectionMode = mode
+		riskProvider.configuration.detectionMode = mode
+	}
+
 	func executeExposureDetectionRequest(task: BGTask) {
 		func complete(success: Bool) {
 			task.setTaskCompleted(success: success)
@@ -429,7 +304,8 @@ extension AppDelegate: ENATaskExecutionDelegate {
 				UNUserNotificationCenter.current().presentNotification(
 					title: AppStrings.LocalNotifications.detectExposureTitle,
 					body: AppStrings.LocalNotifications.detectExposureBody,
-					identifier: ENATaskIdentifier.detectExposures.rawValue)
+					identifier: ENATaskIdentifier.detectExposures.rawValue
+				)
 			}
 			complete(success: true)
 		}
@@ -438,7 +314,7 @@ extension AppDelegate: ENATaskExecutionDelegate {
 			self.taskScheduler.scheduleBackgroundTask(for: .detectExposures)
 		}
 
-		riskProvider.requestRisk()
+		riskProvider.requestRisk(userInitiated: false)
 
 		task.expirationHandler = {
 			logError(message: NSLocalizedString("BACKGROUND_TIMEOUT", comment: "Error"))
@@ -451,7 +327,6 @@ extension AppDelegate: ENATaskExecutionDelegate {
 			task.setTaskCompleted(success: success)
 			taskScheduler.scheduleBackgroundTask(for: .fetchTestResults)
 		}
-
 		self.exposureSubmissionService = ENAExposureSubmissionService(diagnosiskeyRetrieval: exposureManager, client: client, store: store)
 
 		if store.registrationToken != nil && store.testResultReceivedTimeStamp == nil {
@@ -459,7 +334,6 @@ extension AppDelegate: ENATaskExecutionDelegate {
 				switch result {
 				case .failure(let error):
 					logError(message: error.localizedDescription)
-
 				case .success(let testResult):
 					if testResult != .pending {
 						UNUserNotificationCenter.current().presentNotification(
@@ -479,7 +353,6 @@ extension AppDelegate: ENATaskExecutionDelegate {
 			logError(message: NSLocalizedString("BACKGROUND_TIMEOUT", comment: "Error"))
 			complete(success: false)
 		}
-
 	}
 }
 
@@ -487,5 +360,123 @@ private extension URL {
 	init(staticString: StaticString) {
 		// swiftlint:disable:next force_unwrapping
 		self.init(string: "\(staticString)")!
+	}
+}
+
+extension AppDelegate: ExposureDetectionDelegate {
+	func exposureDetection(_ detection: ExposureDetection, determineAvailableData completion: @escaping (DaysAndHours?) -> Void) {
+		client.availableDaysAndHoursUpUntil(.formattedToday()) { result in
+			let mappedResult = result.map { DaysAndHours(days: $0.days, hours: $0.hours) }
+			switch mappedResult {
+			case .success(let daysAndHours):
+				completion(daysAndHours)
+			case .failure:
+				completion(nil)
+			}
+		}
+	}
+
+	func exposureDetection(_ detection: ExposureDetection, downloadDeltaFor remote: DaysAndHours) -> DaysAndHours {
+		let delta = DeltaCalculationResult(
+				remoteDays: Set(remote.days),
+				remoteHours: Set(remote.hours),
+				localDays: Set(downloadedPackagesStore.allDays()),
+				localHours: Set(downloadedPackagesStore.hours(for: .formattedToday()))
+		)
+		return (
+				days: Array(delta.missingDays),
+				hours: Array(delta.missingHours)
+		)
+	}
+
+	func exposureDetection(_ detection: ExposureDetection, downloadAndStore delta: DaysAndHours, completion: @escaping (Error?) -> Void) {
+		func storeDaysAndHours(_ fetchedDaysAndHours: FetchedDaysAndHours) {
+			downloadedPackagesStore.addFetchedDaysAndHours(fetchedDaysAndHours)
+			completion(nil)
+		}
+		client.fetchDays(
+				delta.days,
+				hours: delta.hours,
+				of: .formattedToday(),
+				completion: storeDaysAndHours
+		)
+	}
+
+	func exposureDetection(_ detection: ExposureDetection, downloadConfiguration completion: @escaping (ENExposureConfiguration?) -> Void) {
+		client.exposureConfiguration(completion: completion)
+	}
+
+	func exposureDetectionWriteDownloadedPackages(_ detection: ExposureDetection) -> WrittenPackages? {
+		let fileManager = FileManager()
+		let rootDir = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		do {
+			try fileManager.createDirectory(at: rootDir, withIntermediateDirectories: true, attributes: nil)
+			let packages = downloadedPackagesStore.allPackages(for: .formattedToday(), onlyHours: store.hourlyFetchingEnabled)
+			let writer = AppleFilesWriter(rootDir: rootDir, keyPackages: packages)
+			return writer.writeAllPackages()
+		} catch {
+			return nil
+		}
+	}
+
+	func exposureDetection(
+			_ detection: ExposureDetection,
+			detectSummaryWithConfiguration
+			configuration: ENExposureConfiguration,
+			writtenPackages: WrittenPackages,
+			completion: @escaping (Result<ENExposureDetectionSummary, Error>) -> Void
+	) {
+		func withResultFrom(
+				summary: ENExposureDetectionSummary?,
+				error: Error?
+		) -> Result<ENExposureDetectionSummary, Error> {
+			if let error = error {
+				return .failure(error)
+			}
+			if let summary = summary {
+				return .success(summary)
+			}
+			fatalError("invalid state")
+		}
+		_ = exposureManager.detectExposures(
+				configuration: configuration,
+				diagnosisKeyURLs: writtenPackages.urls
+		) { summary, error in
+			completion(withResultFrom(summary: summary, error: error))
+		}
+	}
+
+}
+
+
+//extension DownloadedPackagesStore {
+//	func addFetchedDaysAndHours(_ daysAndHours: FetchedDaysAndHours) {
+//		let days = daysAndHours.days
+//		days.bucketsByDay.forEach { day, bucket in
+//			self.set(day: day, package: bucket)
+//		}
+//
+//		let hours = daysAndHours.hours
+//		hours.bucketsByHour.forEach { hour, bucket in
+//			self.set(hour: hour, day: hours.day, package: bucket)
+//		}
+//	}
+//}
+
+private extension DownloadedPackagesStore {
+	func allPackages(for day: String, onlyHours: Bool) -> [SAPDownloadedPackage] {
+		var packages = [SAPDownloadedPackage]()
+
+		if onlyHours {  // Testing only: Feed last three hours into framework
+			let allHoursForToday = hourlyPackages(for: .formattedToday())
+			packages.append(contentsOf: Array(allHoursForToday.prefix(3)))
+		} else {
+			let fullDays = allDays()
+			packages.append(
+				contentsOf: fullDays.map { package(for: $0) }.compactMap { $0 }
+			)
+		}
+
+		return packages
 	}
 }

@@ -22,11 +22,6 @@ final class HomeInteractor: RequiresAppDependencies {
 	typealias SectionDefinition = (section: HomeViewController.Section, cellConfigurators: [CollectionViewCellConfiguratorAny])
 	typealias SectionConfiguration = [SectionDefinition]
 
-	enum UserLoadingMode {
-		case automatic
-		case manual
-	}
-
 	// MARK: Creating
 
 	init(
@@ -42,6 +37,7 @@ final class HomeInteractor: RequiresAppDependencies {
 		sections = initialCellConfigurators()
 		riskConsumer.didCalculateRisk = { [weak self] risk in
 			self?.state.risk = risk
+			self?.homeViewController.state.risk = risk
 		}
 		riskProvider.observeRisk(riskConsumer)
 	}
@@ -57,7 +53,8 @@ final class HomeInteractor: RequiresAppDependencies {
 		didSet {
 			homeViewController.setStateOfChildViewControllers(
 				.init(
-					exposureManager: state.exposureManager
+					exposureManagerState: state.exposureManager,
+					detectionMode: state.detectionMode
 				)
 			)
 			sections = initialCellConfigurators()
@@ -69,10 +66,8 @@ final class HomeInteractor: RequiresAppDependencies {
 	private var exposureSubmissionService: ExposureSubmissionService?
 	var enStateHandler: ENStateHandler?
 
-	private var riskLevel: RiskLevel {
-		state.riskLevel
-	}
-
+	private var riskLevel: RiskLevel { state.riskLevel }
+	private var detectionMode: DetectionMode { state.detectionMode }
 	private(set) var sections: SectionConfiguration = []
 
 	private var activeConfigurator: HomeActivateCellConfigurator!
@@ -80,46 +75,8 @@ final class HomeInteractor: RequiresAppDependencies {
 	private var riskLevelConfigurator: HomeRiskLevelCellConfigurator?
 	private var inactiveConfigurator: HomeInactiveRiskCellConfigurator?
 
-	private let userLoadingMode = UserLoadingMode.manual // !
-
 	private var isUpdateTaskRunning: Bool = false
-	private var updateRiskTimer: Timer?
-	private var isTimerRunning: Bool { updateRiskTimer?.isValid ?? false }
-	private var releaseDate: Date?
-	private var startDate: Date?
 	private(set) var testResult: TestResult?
-
-	private func riskCellTask(completion: @escaping (() -> Void)) {
-		riskProvider.requestRisk()
-	}
-
-	private func startCheckRisk() {
-//		riskProvider.requestRisk()
-		guard let indexPath = indexPathForRiskCell() else { return }
-		riskLevelConfigurator?.startLoading()
-		homeViewController.updateSections()
-		homeViewController.reloadCell(at: indexPath)
-
-		riskCellTask {
-			self.riskLevelConfigurator?.stopLoading()
-			guard let indexPath = self.indexPathForRiskCell() else { return }
-			self.homeViewController.updateSections()
-			self.homeViewController.reloadCell(at: indexPath)
-		}
-	}
-
-	private func fetchUpdateRisk() {
-		isUpdateTaskRunning = true
-		reloadRiskCell()
-		riskCellTask(completion: {
-			self.isUpdateTaskRunning = false
-			if self.userLoadingMode == .automatic, !self.isTimerRunning {
-				self.startCountdownAndUpdateRisk()
-			} else {
-				self.reloadRiskCell()
-			}
-        })
-	}
 
 	func updateActiveCell() {
 		guard let indexPath = indexPathForActiveCell() else { return }
@@ -127,36 +84,21 @@ final class HomeInteractor: RequiresAppDependencies {
 		homeViewController.reloadCell(at: indexPath)
 	}
 
-	private func startCountdownAndUpdateRisk() {
-		startCountdown()
-		fetchUpdateRisk()
-	}
-
 	private func updateRiskLoading() {
 		isUpdateTaskRunning ? riskLevelConfigurator?.startLoading() : riskLevelConfigurator?.stopLoading()
 	}
 
-	private func updateRiskCounter() {
-		if let releaseDate = releaseDate, isTimerRunning {
-			riskLevelConfigurator?.updateCounter(startDate: Date(), releaseDate: releaseDate)
-		} else {
-			riskLevelConfigurator?.removeCounter()
-		}
-	}
-
 	private func updateRiskButton() {
-		riskLevelConfigurator?.updateButtonEnabled(!isUpdateTaskRunning && !isTimerRunning)
+		riskLevelConfigurator?.updateButtonEnabled(!isUpdateTaskRunning)
 	}
 
 	private func reloadRiskCell() {
 		guard let indexPath = indexPathForRiskCell() else { return }
 		updateRiskLoading()
 		updateRiskButton()
-		updateRiskCounter()
 		homeViewController.updateSections()
 		homeViewController.reloadCell(at: indexPath)
 	}
-
 
 	private func initialCellConfigurators() -> SectionConfiguration {
 
@@ -200,57 +142,13 @@ final class HomeInteractor: RequiresAppDependencies {
 
 		return sections
 	}
-
-	// MARK: Timer
-
-	private func startTimer() {
-		let timer = Timer(timeInterval: 1.0, target: self, selector: #selector(fireTimer), userInfo: nil, repeats: true)
-		updateRiskTimer = timer
-		RunLoop.current.add(timer, forMode: .common)
-		updateRiskTimer?.tolerance = 0.1
-	}
-
-	private func stopTimer() {
-		updateRiskTimer?.invalidate()
-		updateRiskTimer = nil
-	}
-
-	@objc
-	private func fireTimer(timer _: Timer) {
-		guard let releaseDate = releaseDate else { return }
-		let now = Date()
-		if now <= releaseDate {
-			reloadRiskCell()
-		} else {
-			stopTimer()
-			if userLoadingMode == .automatic, !isUpdateTaskRunning {
-				startCountdownAndUpdateRisk()
-			} else {
-				reloadRiskCell()
-			}
-		}
-	}
-
-	private func startCountdown() {
-		startDate = Date()
-		releaseDate = calculateReleaseDate(from: startDate)
-		startTimer()
-	}
-
-	private func calculateReleaseDate(from date: Date?) -> Date? {
-		guard let date = date else { return nil }
-		var dateComponents = DateComponents()
-		dateComponents.second = 6
-		let newDate = Calendar.current.date(byAdding: dateComponents, to: date)
-		return newDate
-	}
 }
 
 // MARK: - Test result cell methods.
 
 extension HomeInteractor {
 
-	func reloadTestResult(with result: TestResult) {
+	private func reloadTestResult(with result: TestResult) {
 		testResultConfigurator.testResult = result
 		reloadActionSection()
 		guard let indexPath = indexPathForTestResultCell() else { return }
@@ -268,70 +166,68 @@ extension HomeInteractor {
 // MARK: - Action section setup helpers.
 
 extension HomeInteractor {
+	private var risk: Risk? { state.risk }
+	private var riskDetails: Risk.Details? { risk?.details }
 
 	// swiftlint:disable:next function_body_length
 	func setupRiskConfigurator() -> CollectionViewCellConfiguratorAny? {
-		let dateLastExposureDetection = store.dateLastExposureDetection
 
-		let isButtonHidden = userLoadingMode == .automatic
-		let isCounterLabelHidden = !isButtonHidden
+		let detectionIsAutomatic = detectionMode == .automatic
 
-//		if riskLevel != .inactive, userLoadingMode == .automatic {
-//			startCountdown()
-//		}
+		let dateLastExposureDetection = riskDetails?.exposureDetectionDate
+
+		riskLevelConfigurator = nil
+		inactiveConfigurator = nil
+
+		let detectionInterval = (riskProvider.configuration.exposureDetectionInterval.day ?? 1) * 24
 
 		switch riskLevel {
 		case .unknownInitial:
 			riskLevelConfigurator = HomeUnknownRiskCellConfigurator(
 				isLoading: false,
-				isButtonEnabled: true,
-				isButtonHidden: true,
-				isCounterLabelHidden: isCounterLabelHidden,
-				startDate: startDate,
-				releaseDate: releaseDate,
-				lastUpdateDate: nil
+				detectionIntervalLabelHidden: false,
+				lastUpdateDate: nil,
+				detectionInterval: detectionInterval,
+				detectionMode: detectionMode,
+				manualExposureDetectionState: riskProvider.manualExposureDetectionState
 			)
 		case .inactive:
-			inactiveConfigurator = HomeInactiveRiskCellConfigurator(incativeType: .noCalculationPossible, lastInvestigation: "Geringes Risiko", lastUpdateDate: dateLastExposureDetection)
+			inactiveConfigurator = HomeInactiveRiskCellConfigurator(
+				incativeType: .noCalculationPossible,
+				lastInvestigation: "Geringes Risiko",
+				lastUpdateDate: dateLastExposureDetection
+			)
 		case .unknownOutdated:
-			inactiveConfigurator = HomeInactiveRiskCellConfigurator(incativeType: .outdatedResults, lastInvestigation: "Geringes Risiko", lastUpdateDate: dateLastExposureDetection)
+			inactiveConfigurator = HomeInactiveRiskCellConfigurator(
+				incativeType: .outdatedResults,
+				lastInvestigation: "Geringes Risiko",
+				lastUpdateDate: dateLastExposureDetection
+			)
 		case .low:
 			riskLevelConfigurator = HomeLowRiskCellConfigurator(
-				startDate: startDate,
-				releaseDate: releaseDate,
 				numberRiskContacts: state.numberRiskContacts,
-				numberDays: 2,
+				numberDays: state.risk?.details.numberOfDaysWithActiveTracing ?? 0,
 				totalDays: 14,
-				lastUpdateDate: dateLastExposureDetection
+				lastUpdateDate: dateLastExposureDetection,
+				isButtonHidden: detectionIsAutomatic,
+				detectionMode: detectionMode,
+				manualExposureDetectionState: riskProvider.manualExposureDetectionState,
+				detectionInterval: detectionInterval
 			)
-			riskLevelConfigurator?.isButtonHidden = true // TODO: hide isButtonHidden
-			riskLevelConfigurator?.isCounterLabelHidden = isCounterLabelHidden
 		case .increased:
 			riskLevelConfigurator = HomeHighRiskCellConfigurator(
-				startDate: startDate,
-				releaseDate: releaseDate,
 				numberRiskContacts: state.numberRiskContacts,
 				daysSinceLastExposure: state.daysSinceLastExposure,
-				lastUpdateDate: dateLastExposureDetection
+				lastUpdateDate: dateLastExposureDetection,
+				manualExposureDetectionState: riskProvider.manualExposureDetectionState,
+				detectionMode: detectionMode,
+				validityDuration: detectionInterval
 			)
-			riskLevelConfigurator?.isButtonHidden = true // TODO: isButtonHidden
-			riskLevelConfigurator?.isCounterLabelHidden = isCounterLabelHidden
 		}
-		riskLevelConfigurator?.buttonAction = { [unowned self] in
-			self.startCountdownAndUpdateRisk()
+		riskLevelConfigurator?.buttonAction = {
+			self.riskProvider.requestRisk(userInitiated: true)
 		}
-
-		if let risk = riskLevelConfigurator {
-			riskLevelConfigurator = risk
-			return risk
-		}
-
-		if let inactive = inactiveConfigurator {
-			inactiveConfigurator = inactive
-			return inactive
-		}
-
-		return nil
+		return riskLevelConfigurator ?? inactiveConfigurator
 	}
 
 	private func setupTestResultConfigurator() -> HomeTestResultCellConfigurator {
@@ -417,12 +313,12 @@ extension HomeInteractor {
 		}
 
 		return actionsConfigurators
-		}
+	}
 
-	func setupActionSectionDefinition() -> SectionDefinition {
+	private func setupActionSectionDefinition() -> SectionDefinition {
 		return (.actions, setupActionConfigurators())
 	}
-	}
+}
 
 // MARK: - IndexPath helpers.
 
@@ -495,6 +391,7 @@ extension HomeInteractor {
 
 extension HomeInteractor {
 	struct State {
+		var detectionMode = DetectionMode.default
 		var isLoading = false
 		var exposureManager: ExposureManagerState
 		var numberRiskContacts: Int {

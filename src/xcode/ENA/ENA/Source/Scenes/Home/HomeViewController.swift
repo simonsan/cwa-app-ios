@@ -28,11 +28,14 @@ final class HomeViewController: UIViewController, RequiresAppDependencies {
 	init?(
 		coder: NSCoder,
 		delegate: HomeViewControllerDelegate,
-		initialEnState: ENStateHandler.State
+		initialEnState: ENStateHandler.State,
+		state: State
 	) {
 		self.delegate = delegate
 		self.enState = initialEnState
+		self.state = state
 		super.init(coder: coder)
+		navigationItem.largeTitleDisplayMode = .never
 		addToUpdatingSetIfNeeded(homeInteractor)
 	}
 
@@ -45,6 +48,13 @@ final class HomeViewController: UIViewController, RequiresAppDependencies {
 	}
 	// MARK: Properties
 
+	var state: State {
+		didSet {
+			homeInteractor.state.exposureManager = state.exposureManagerState
+			homeInteractor.state.risk = state.risk
+			homeInteractor.state.detectionMode = state.detectionMode
+		}
+	}
 	private var sections: HomeInteractor.SectionConfiguration = []
 	private var dataSource: UICollectionViewDiffableDataSource<Section, UUID>?
 	private var collectionView: UICollectionView!
@@ -54,7 +64,7 @@ final class HomeViewController: UIViewController, RequiresAppDependencies {
 			homeViewController: self,
 			state: .init(
 				isLoading: false,
-				exposureManager: .init(),
+				exposureManager: state.exposureManagerState,
                 risk: risk
 			),
 			exposureSubmissionService: self.exposureSubmissionService,
@@ -74,7 +84,7 @@ final class HomeViewController: UIViewController, RequiresAppDependencies {
 	}()
 	private var enStateUpdatingSet = NSHashTable<AnyObject>.weakObjects()
 
-	private var risk: Risk?
+	private var risk: Risk? { state.risk }
 	private let riskConsumer = RiskConsumer()
 
 	enum Section: Int {
@@ -89,9 +99,11 @@ final class HomeViewController: UIViewController, RequiresAppDependencies {
 		super.viewDidLoad()
 
 		riskConsumer.didCalculateRisk = { [weak self] risk in
-			self?.risk = risk
+			self?.state.risk = risk
 			self?.updateOwnUI()
 		}
+
+		riskProvider.observeRisk(riskConsumer)
 
 		configureHierarchy()
 		configureDataSource()
@@ -104,8 +116,8 @@ final class HomeViewController: UIViewController, RequiresAppDependencies {
 
 	override func viewWillAppear(_ animated: Bool) {
 		super.viewWillAppear(animated)
+		riskProvider.requestRisk(userInitiated: false)
 		updateOwnUI()
-		navigationItem.largeTitleDisplayMode = .never
 	}
 
 	override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -142,9 +154,9 @@ final class HomeViewController: UIViewController, RequiresAppDependencies {
 	// Called by HomeInteractor
 	func setStateOfChildViewControllers(_ state: State) {
 		let state = ExposureDetectionViewController.State(
-			exposureManagerState: state.exposureManager,
-			risk: risk,
-			nextRefresh: nil
+			exposureManagerState: state.exposureManagerState,
+			detectionMode: state.detectionMode,
+			risk: risk
 		)
 		exposureDetectionController?.state = state
 	}
@@ -214,9 +226,9 @@ final class HomeViewController: UIViewController, RequiresAppDependencies {
 
 	func showExposureDetection() {
 		let state = ExposureDetectionViewController.State(
-			exposureManagerState: homeInteractor.state.exposureManager,
-			risk: risk,
-			nextRefresh: nil
+			exposureManagerState: self.state.exposureManagerState,
+			detectionMode: self.state.detectionMode,
+			risk: risk
 		)
 
 		let vc = AppStoryboard.exposureDetection.initiateInitial { coder in
@@ -226,7 +238,7 @@ final class HomeViewController: UIViewController, RequiresAppDependencies {
 				delegate: self
 			)
 		}
-		addToUpdatingSetIfNeeded(vc)
+//		addToUpdatingSetIfNeeded(vc)
 		exposureDetectionController = vc as? ExposureDetectionViewController
 		present(vc, animated: true)
 	}
@@ -367,7 +379,7 @@ final class HomeViewController: UIViewController, RequiresAppDependencies {
 		let image = UIImage(named: "Corona-Warn-App")
 		let leftItem = UIBarButtonItem(image: image, style: .plain, target: nil, action: nil)
 		leftItem.isEnabled = false
-		self.navigationItem.leftBarButtonItem = leftItem
+		navigationItem.leftBarButtonItem = leftItem
 	}
 
 }
@@ -443,6 +455,7 @@ private extension HomeViewController {
 
 extension HomeViewController: ExposureStateUpdating {
 	func updateExposureState(_ state: ExposureManagerState) {
+		self.state.exposureManagerState = state
 		updateOwnUI()
 		exposureDetectionController?.updateUI()
 		settingsController?.updateExposureState(state)

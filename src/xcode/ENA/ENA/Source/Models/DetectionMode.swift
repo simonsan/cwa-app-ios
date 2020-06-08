@@ -1,3 +1,4 @@
+//
 // Corona-Warn-App
 //
 // SAP SE and all other contributors
@@ -14,14 +15,13 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+//
 
-import ExposureNotification
 import Foundation
 
-extension HomeViewController {
-	struct State {
-		var exposureManagerState: ExposureManagerState = .init()
-		var risk: Risk?
-		var detectionMode: DetectionMode = DetectionMode.default
-	}
+enum DetectionMode {
+	case automatic
+	case manual
+
+	static let `default` = DetectionMode.manual
 }

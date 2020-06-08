@@ -18,7 +18,7 @@
 import BackgroundTasks
 import ExposureNotification
 import UIKit
-import Reachability
+
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate, RequiresAppDependencies {
 	// MARK: Properties
@@ -27,9 +27,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, RequiresAppDepend
 
 	private lazy var navigationController: UINavigationController = AppNavigationController()
 	private var homeController: HomeViewController?
-	var state = State(summary: nil, exposureManager: .init()) {
+	var state = State(exposureManager: .init()) {
 		didSet {
+			homeController?.state = .init(detectionMode: state.detectionMode)
 			homeController?.homeInteractor.state = .init(
+				detectionMode: state.detectionMode,
 				isLoading: false,
 				exposureManager: state.exposureManager
 			)
@@ -94,27 +96,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, RequiresAppDepend
 		setupUI()
 
 		NotificationCenter.default.addObserver(self, selector: #selector(isOnboardedDidChange(_:)), name: .isOnboardedDidChange, object: nil)
-
-		NotificationCenter
-			.default
-			.addObserver(
-				self,
-				selector: #selector(exposureSummaryDidChange(_:)),
-				name: .didDetectExposureDetectionSummary,
-				object: nil
-			)
 	}
 
 	func sceneWillEnterForeground(_ scene: UIScene) {
 		let state = exposureManager.preconditions()
-		let newState = ExposureManagerState(
-				authorized: ENManager.authorizationStatus == .authorized,
-				enabled: state.enabled,
-				status: state.status
-		)
-		updateExposureState(newState)
+		updateExposureState(state)
 	}
-
 
 	func sceneDidBecomeActive(_: UIScene) {
 		hidePrivacyProtectionWindow()
@@ -125,25 +112,15 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, RequiresAppDepend
 		showPrivacyProtectionWindow()
 	}
 
-	func sceneDidEnterBackground(_ scene: UIScene) {
-		taskScheduler.scheduleBackgroundTaskRequests()
-	}
-
 	// MARK: Helper
 
 	func requestUpdatedExposureState() {
 		let state = exposureManager.preconditions()
-		let newState = ExposureManagerState(
-				authorized: ENManager.authorizationStatus == .authorized,
-				enabled: state.enabled,
-				status: state.status
-		)
-		updateExposureState(newState)
+		updateExposureState(state)
 	}
 
 	private func setupUI() {
 		setupNavigationBarAppearance()
-
 		if (exposureManager is MockExposureManager) && UserDefaults.standard.value(forKey: "isOnboarded") as? String == "NO" {
 			showOnboarding()
 		} else if !store.isOnboarded {
@@ -197,11 +174,14 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, RequiresAppDepend
 			fatalError("It should not happen.")
 		}
 
+		let mode: DetectionMode = UIApplication.shared.backgroundRefreshStatus == UIBackgroundRefreshStatus.available ? .automatic : .manual
+
 		let vc = AppStoryboard.home.initiate(viewControllerType: HomeViewController.self) { [unowned self] coder in
 			HomeViewController(
 				coder: coder,
 				delegate: self,
-				initialEnState: enStateHandler.state
+				initialEnState: enStateHandler.state,
+				state: .init(detectionMode: mode)
 			)
 		}
 
@@ -233,15 +213,6 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, RequiresAppDepend
 	@objc
 	func isOnboardedDidChange(_: NSNotification) {
 		store.isOnboarded ? showHome() : showOnboarding()
-	}
-
-	@objc
-	func exposureSummaryDidChange(_ notification: NSNotification) {
-		guard let summary = notification.userInfo?["summary"] as? ENExposureDetectionSummary else {
-			fatalError("received invalid summary notification. this is a programmer error")
-		}
-		state.summary = summary
-		updateExposureState(state.exposureManager)
 	}
 
 	func scene(_: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
@@ -336,10 +307,6 @@ extension SceneDelegate: HomeViewControllerDelegate {
 		UIApplication.coronaWarnDelegate().downloadedPackagesStore.reset()
 		NotificationCenter.default.post(name: .isOnboardedDidChange, object: nil)
 	}
-
-	func homeViewControllerStartExposureTransaction(_: HomeViewController) {
-		UIApplication.coronaWarnDelegate().appStartExposureDetectionTransaction()
-	}
 }
 
 extension SceneDelegate: UNUserNotificationCenterDelegate {
@@ -377,13 +344,15 @@ private extension Array where Element == URLQueryItem {
 
 extension SceneDelegate {
 	struct State {
-		var summary: ENExposureDetectionSummary?
 		var exposureManager: ExposureManagerState
+		var detectionMode: DetectionMode = .automatic
 	}
 }
 
 extension SceneDelegate: ExposureStateUpdating {
 	func updateExposureState(_ state: ExposureManagerState) {
+		riskProvider.exposureManagerState = state
+		riskProvider.requestRisk(userInitiated: false)
 		homeController?.updateExposureState(state)
 		enStateHandler?.updateExposureState(state)
 	}

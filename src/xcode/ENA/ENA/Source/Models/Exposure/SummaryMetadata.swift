@@ -1,7 +1,7 @@
 //
 // Corona-Warn-App
 //
-// SAP SE and all other contributors /
+// SAP SE and all other contributors
 // copyright owners license this file to you under the Apache
 // License, Version 2.0 (the "License"); you may not use this
 // file except in compliance with the License.
@@ -18,12 +18,16 @@
 //
 
 import Foundation
+import ExposureNotification
 
-/// Determines how the risk level is updated
-enum RiskProvidingConfigurationUpdateMode {
-	/// The user has to manually update the risk level (e.g.: by tapping on a button)
-	case manual
+struct SummaryMetadata: Codable {
+	let summary: CodableExposureDetectionSummary
+	let date: Date
+}
 
-	/// The risk level is automatically kept up to day (background processing)
-	case automatic
+extension SummaryMetadata {
+	init(detectionSummary: ENExposureDetectionSummary, date: Date = Date()) {
+		self.summary = CodableExposureDetectionSummary(with: detectionSummary)
+		self.date = date
+	}
 }
