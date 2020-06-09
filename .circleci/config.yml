@@ -19,12 +19,6 @@ jobs:
       xcode: 11.5.0
     shell: zsh
     steps:
-      - run:
-          name: Abort if no pull request
-          command: |
-            if [ -z "${CIRCLE_PULL_REQUEST}" ]; then
-              circleci-agent step halt
-            fi
       - checkout
       - run:
           name: Install dependencies
