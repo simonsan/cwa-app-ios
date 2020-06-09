@@ -75,7 +75,7 @@ jobs:
           command: |
             SCANNER=sonar-scanner-cli-4.3.0.2102-macosx
             SCANNERDIR=~/sonar/sonar-scanner-4.3.0.2102-macosx
-            if [[ ! -x "~/sonar/$SCANNERDIR/bin/sonar-scanner" ]]; then
+            if [[ ! -x "$SCANNERDIR/bin/sonar-scanner" ]]; then
               curl -Ol https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/$SCANNER.zip
               unzip -qq -o $SCANNER.zip -d ~/sonar/
             fi
