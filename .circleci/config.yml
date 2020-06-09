@@ -111,6 +111,6 @@ workflows:
         #    branches:
         #      only: /^development*/
         - grab-screenshots:
-          filters:
-            branches:
-              only: /^development*/
+            filters:
+              branches:
+                only: /^development*/
