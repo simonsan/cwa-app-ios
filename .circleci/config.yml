@@ -10,7 +10,7 @@ jobs:
       - checkout
       - run:
           name: Install dependencies
-          command: brew install swiftlint && cd src/xcode && bundle install
+          command: cd src/xcode && bundle install
       - run:
           name: Build
           command: cd src/xcode && bundle exec fastlane build
@@ -32,25 +32,62 @@ jobs:
       - run:
           name: Tests
           command: cd src/xcode && bundle exec fastlane test
-#      - run:
-#          name: Convert coverage information to SonarCloud format
-#          command: |
-#            ./scripts/xcov_to_sonarqube_generic.sh src/xcode/fastlane/test_output/*.xccovarchive/ > src/xcode/fastlane/test_output/coverage.xml
-#            sed -i "" 's|/Users/distiller/project/||' src/xcode/fastlane/test_output/coverage.xml
-#      - run:
-#          name: Fix SwiftLint output for SonarCloud
-#          command: |
-#                mv src/xcode/swiftlint.result.json src/xcode/swiftlint.result.original.json
-#                cat src/xcode/swiftlint.result.original.json | jq '.["issues"]' > src/xcode/swiftlint.result.json
-#      - sonarcloud/scan:
-#          os: macosx
-#          version: 4.3.0.2102
+      - persist_to_workspace:
+          root: ~/project
+          paths:
+            - scripts/*.sh
+            - sonar-project.properties
+            - src/xcode/
+  assess:
+    macos:
+      xcode: 11.5.0
+    shell: zsh
+    steps:
+      - checkout
+      - restore_cache:
+          key: sonar-cloud-v1
+      - attach_workspace:
+          at: ~/project/
+      - run:
+          name: Convert coverage information to SonarCloud format
+          command: |
+            ./scripts/xcov_to_sonarqube_generic.sh src/xcode/fastlane/test_output/*.xccovarchive/ > src/xcode/fastlane/test_output/coverage.xml
+            sed -i "" 's|/Users/distiller/project/||' src/xcode/fastlane/test_output/coverage.xml
+      - run:
+          name: Fix SwiftLint output for SonarCloud
+          command: |
+            mv src/xcode/swiftlint.result.json src/xcode/swiftlint.result.original.json
+            cat src/xcode/swiftlint.result.original.json | jq '.["issues"]' > src/xcode/swiftlint.result.json
       - store_test_results:
           path: src/xcode/fastlane/test_output
       - store_artifacts:
           path: src/xcode/fastlane/test_output
       - store_artifacts:
           path: src/xcode/swiftlint.result.json
+      - run:
+          name: Abort if external pull request
+          command: |
+            if [ -v CIRCLE_PR_REPONAME ]; then
+              circleci-agent step halt
+            fi
+      - run:
+          name: Install Sonar Scanner
+          command: |
+            SCANNER=sonar-scanner-cli-4.3.0.2102-macosx
+            SCANNERDIR=~/sonar/sonar-scanner-4.3.0.2102-macosx
+            if [[ ! -x "~/sonar/$SCANNERDIR/bin/sonar-scanner" ]]; then
+              curl -Ol https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/$SCANNER.zip
+              unzip -qq -o $SCANNER.zip -d ~/sonar/
+            fi
+
+            chmod +x $SCANNERDIR/bin/sonar-scanner
+            chmod +x $SCANNERDIR/jre/bin/java
+            $SCANNERDIR/bin/sonar-scanner
+      - save_cache:
+          key: sonar-cloud-v1
+          paths:
+            - ~/sonar/
+            - ~/.sonar/
 
   grab-screenshots:
     macos:
@@ -64,16 +101,12 @@ jobs:
       - store_artifacts:
           path: src/xcode/screenshots
 
-#orbs:
-#  sonarcloud: tkowark/sonarcloud3@0.1.0
 workflows:
-    # Run everytime
     default:
       jobs:
-        - build
-    # Run only on pull requests
-    pull_request:
-      jobs:
-        - test
- #       - test:
- #          context: SonarCloud
+#        - build
+#        - test
+        - assess:
+            #requires:
+            #  - test
+            context: SonarCloud
