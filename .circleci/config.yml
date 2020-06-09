@@ -71,7 +71,7 @@ jobs:
               circleci-agent step halt
             fi
       - run:
-          name: Install Sonar Scanner
+          name: Install and run sonar-scanner
           command: |
             SCANNER=sonar-scanner-cli-4.3.0.2102-macosx
             SCANNERDIR=~/sonar/sonar-scanner-4.3.0.2102-macosx
