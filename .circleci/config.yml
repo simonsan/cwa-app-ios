@@ -32,7 +32,7 @@ jobs:
             - scripts/*.sh
             - sonar-project.properties
             - src/xcode/
-  assess:
+  scan:
     macos:
       xcode: 11.5.0
     shell: zsh
@@ -97,11 +97,20 @@ jobs:
           path: src/xcode/screenshots
 
 workflows:
-    default:
+    test-and-scan:
       jobs:
-#        - build
         - test
-        - assess:
+        - scan:
             requires:
               - test
             context: SonarCloud
+    build-and-pics:
+      jobs:
+        #- build:
+        #  filters:
+        #    branches:
+        #      only: /^development|^branch-.*/
+        - grab-screenshots:
+          filters:
+            branches:
+              only: /^development|^branch-.*/
