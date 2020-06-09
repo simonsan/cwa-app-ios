@@ -45,19 +45,19 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: sonar-cloud-v1
+          key: sonar-cloud-v2
       - attach_workspace:
           at: ~/project/
-      #- run:
-      #    name: Convert coverage information to SonarCloud format
-      #    command: |
-      #      ./scripts/xcov_to_sonarqube_generic.sh src/xcode/fastlane/test_output/*.xccovarchive/ > src/xcode/fastlane/test_output/coverage.xml
-      #      sed -i "" 's|/Users/distiller/project/||' src/xcode/fastlane/test_output/coverage.xml
-      #- run:
-      #    name: Fix SwiftLint output for SonarCloud
-      #    command: |
-      #      mv src/xcode/swiftlint.result.json src/xcode/swiftlint.result.original.json
-      #      cat src/xcode/swiftlint.result.original.json | jq '.["issues"]' > src/xcode/swiftlint.result.json
+      - run:
+          name: Convert coverage information to SonarCloud format
+          command: |
+            ./scripts/xcov_to_sonarqube_generic.sh src/xcode/fastlane/test_output/*.xccovarchive/ > src/xcode/fastlane/test_output/coverage.xml
+            sed -i "" 's|/Users/distiller/project/||' src/xcode/fastlane/test_output/coverage.xml
+      - run:
+          name: Fix SwiftLint output for SonarCloud
+          command: |
+            mv src/xcode/swiftlint.result.json src/xcode/swiftlint.result.original.json
+            cat src/xcode/swiftlint.result.original.json | jq '.["issues"]' > src/xcode/swiftlint.result.json
       - store_test_results:
           path: src/xcode/fastlane/test_output
       - store_artifacts:
@@ -86,10 +86,9 @@ jobs:
           environment:
             SONARQUBE_SCANNER_PARAMS: '{"sonar.host.url":"https://sonarcloud.io"}'
       - save_cache:
-          key: sonar-cloud-v1
+          key: sonar-cloud-v2
           paths:
             - ~/sonar/
-            - ~/.sonar/
 
   grab-screenshots:
     macos:
@@ -107,8 +106,8 @@ workflows:
     default:
       jobs:
 #        - build
-#        - test
+        - test
         - assess:
-            #requires:
-            #  - test
+            requires:
+              - test
             context: SonarCloud
