@@ -19,6 +19,9 @@ jobs:
       xcode: 11.5.0
     shell: zsh
     steps:
+      - run:
+          name: Skip this job for non-PRs and when not on development
+          command: '[[ -x CIRCLE_PR_NUMBER ]] && circleci step halt || true'
       - checkout
       - run:
           name: Install dependencies
@@ -104,13 +107,10 @@ workflows:
             requires:
               - test
             context: SonarCloud
-    build-and-pics:
+    build-and-screenshots:
       jobs:
-        #- build:
-        #  filters:
-        #    branches:
-        #      only: /^development*/
+        - build
         - grab-screenshots:
             filters:
               branches:
-                only: /^development|branch-.*/
+                only: /^master/
