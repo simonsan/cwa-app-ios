@@ -23,7 +23,7 @@ jobs:
           name: Skip this job for non-PRs and when not on development
           command: |
             testedBranches=(development)
-            [[ ${allowedBranches[(r)$CIRCLE_BRANCH]} == $CIRCLE_BRANCH || -v CIRCLE_PR_NUMBER ]] && circleci step halt || true
+            [[ ${allowedBranches[(r)$CIRCLE_BRANCH]} == $CIRCLE_BRANCH || -v CIRCLE_PR_NUMBER ]] && true || circleci step halt
       - checkout
       - run:
           name: Install dependencies
