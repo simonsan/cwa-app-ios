@@ -48,7 +48,7 @@ jobs:
       - run:
           name: Convert coverage information to SonarCloud format
           command: |
-            ./scripts/xcov_to_sonar.sh "src/xcode/fastlane/test_output/*.xccovarchive/" "/Users/distiller/project/" "src/xcode/fastlane/test_output/coverage.xml"
+            ./scripts/xcov_to_sonar.sh src/xcode/fastlane/test_output/action_0.xccovarchive/ /Users/distiller/project/ src/xcode/fastlane/test_output/coverage.xml
       - run:
           name: Fix SwiftLint output for SonarCloud
           command: |

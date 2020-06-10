@@ -28,9 +28,9 @@ function xccov_to_generic {
   echo '</coverage>'
 }
 
-if [[ -f $1 || -d $1 ]]; then
+if [[ -d "$1" ]]; then
   {
-    xccov_to_generic $1  > coverage.xml
+    xccov_to_generic "$1"  > coverage.xml
     echo "[SUCCESS] Created coverage file coverage.xml from $1"
   } || {
     echo "[FAILURE] Coverage file creation failed. Writing dummy file."
