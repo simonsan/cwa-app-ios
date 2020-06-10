@@ -54,8 +54,10 @@ final class ENATaskScheduler {
 	typealias CompletionHandler = (() -> Void)
 
 	private func registerTasks() {
-		registerTask(with: .detectExposures, taskHander: executeExposureDetectionRequest(_:))
-		registerTask(with: .fetchTestResults, taskHander: executeFetchTestResults(_:))
+//		registerTask(with: .detectExposures, taskHander: executeBackgroundTask(_:))
+//		registerTask(with: .fetchTestResults, taskHander: executeExposureDetectionRequest(_:))
+//		registerTask(with: .fetchTestResults, taskHander: executeFetchTestResults(_:))
+		registerTask(with: .fetchTestResults, taskHander: executeBackgroundTask(_:))
 	}
 
 	private func registerTask(with taskIdentifier: ENATaskIdentifier, taskHander: @escaping ((BGTask) -> Void)) {
@@ -66,8 +68,8 @@ final class ENATaskScheduler {
 	}
 
 	func scheduleTasks() {
-		scheduleTask(for: .detectExposures, cancelExisting: true)
 		scheduleTask(for: .fetchTestResults, cancelExisting: true)
+//		scheduleTask(for: .detectExposures, cancelExisting: true)
 	}
 
 	func cancelTasks() {
@@ -102,6 +104,11 @@ final class ENATaskScheduler {
 	}
 
 	// Task Handlers:
+	private func executeBackgroundTask(_ task: BGTask) {
+		executeExposureDetectionRequest(task)
+		executeFetchTestResults(task)
+	}
+
 	private func executeExposureDetectionRequest(_ task: BGTask) {
 		guard let taskDelegate = taskDelegate else {
 			task.setTaskCompleted(success: false)
