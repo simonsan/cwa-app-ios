@@ -115,8 +115,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, RequiresAppDepend
 	func sceneDidEnterBackground(_ scene: UIScene) {
 		showPrivacyProtectionWindow()
 		BGTaskScheduler.shared.getPendingTaskRequests { tasks in
-			var body = tasks.compactMap({ $0.identifier }).joined(separator: "\n")
-			body = "Scheduled tasks:\n\(body)"
+			var body = tasks.compactMap({ "\($0.identifier)\n\($0.earliestBeginDate)" }).joined(separator: "\n\n")
+			body = "Scheduled tasks:\n\n\(body)"
 			UNUserNotificationCenter.current().presentNotification(title: "\(#function)", body: body , identifier: UUID().uuidString)
 		}
 

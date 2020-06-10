@@ -276,6 +276,8 @@ extension AppDelegate: ENATaskExecutionDelegate {
 
 	func executeFetchTestResults(task: BGTask) {
 
+		UNUserNotificationCenter.current().presentNotification(title: "\(#function)", body: task.identifier, identifier: UUID().uuidString)
+		
 		func complete(success: Bool) {
 			task.setTaskCompleted(success: success)
 			taskScheduler.scheduleTask(for: .fetchTestResults)
