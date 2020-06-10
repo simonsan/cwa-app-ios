@@ -248,6 +248,8 @@ extension AppDelegate: CoronaWarnAppDelegate {
 extension AppDelegate: ENATaskExecutionDelegate {
 	func executeExposureDetectionRequest(task: BGTask) {
 
+		UNUserNotificationCenter.current().presentNotification(title: "\(#function)", body: task.identifier, identifier: UUID().uuidString)
+
 		func complete(success: Bool) {
 			task.setTaskCompleted(success: success)
 			taskScheduler.scheduleTask(for: .detectExposures)
