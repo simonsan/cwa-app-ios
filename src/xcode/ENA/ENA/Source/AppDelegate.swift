@@ -19,6 +19,7 @@ import BackgroundTasks
 import ExposureNotification
 import FMDB
 import UIKit
+import CryptoKit
 
 protocol CoronaWarnAppDelegate: AnyObject {
 	var client: Client { get }
@@ -84,8 +85,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
 	let downloadedPackagesStore: DownloadedPackagesStore = DownloadedPackagesSQLLiteStore(fileName: "packages")
 
-
 	let store: Store = {
+
+		let passwordStore = GenericPasswordStore()
+
 		do {
 			let fileManager = FileManager.default
 			let directoryURL = try fileManager
@@ -94,18 +97,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
 			if !fileManager.fileExists(atPath: directoryURL.path) {
 				try fileManager.createDirectory(atPath: directoryURL.path, withIntermediateDirectories: true, attributes: nil)
-				guard let key = KeychainHelper.generateDatabaseKey() else {
-					fatalError("Creating the Database failed")
-				}
+				let key = SymmetricKey(size: .bits256)
+				try passwordStore.storeKey(key, account: "secureStoreDatabaseKey")
 				return SecureStore(at: directoryURL, key: key)
 			} else {
-				guard let keyData = KeychainHelper.loadFromKeychain(key: "secureStoreDatabaseKey") else {
-					guard let key = KeychainHelper.generateDatabaseKey() else {
-						fatalError("Creating the Database failed")
-					}
+				guard let key: SymmetricKey = try passwordStore.readKey(account: "secureStoreDatabaseKey") else {
+					let key = SymmetricKey(size: .bits256)
+					try passwordStore.storeKey(key, account: "secureStoreDatabaseKey")
 					return SecureStore(at: directoryURL, key: key)
 				}
-				let key = String(decoding: keyData, as: UTF8.self)
 				return SecureStore(at: directoryURL, key: key)
 			}
 		} catch {

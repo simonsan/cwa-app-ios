@@ -18,6 +18,7 @@
 //
 
 import Foundation
+import CryptoKit
 
 /// The `SecureStore` class implements the `Store` protocol that defines all required storage attributes.
 /// It uses an SQLite Database that still needs to be encrypted
@@ -25,7 +26,7 @@ final class SecureStore: Store {
 	private let directoryURL: URL
 	private let kvStore: SQLiteKeyValueStore
 
-	init(at directoryURL: URL, key: String) {
+	init(at directoryURL: URL, key: SymmetricKey) {
 		self.directoryURL = directoryURL
 		kvStore = SQLiteKeyValueStore(with: directoryURL, key: key)
 	}
@@ -34,7 +35,7 @@ final class SecureStore: Store {
 		kvStore.flush()
 	}
 
-	func clearAll(key: String?) {
+	func clearAll(key: SymmetricKey?) {
 		kvStore.clearAll(key: key)
 	}
 

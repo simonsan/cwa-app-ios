@@ -17,6 +17,7 @@
 
 import FMDB
 import Foundation
+import CryptoKit
 
 /// Basic SQLite Key/Value store with Keys as `TEXT` and Values stored as `BLOB`
 class SQLiteKeyValueStore {
@@ -26,7 +27,7 @@ class SQLiteKeyValueStore {
 	/// - parameter url: URL on disk where the FMDB should be initialized
 	/// If any part of the init fails no Datbase will be created
 	/// If the Database can't be accessed with the key the currentFile will be reset
-	init(with url: URL, key: String) {
+	init(with url: URL, key: SymmetricKey) {
 		self.directoryURL = url
 		var fileURL = directoryURL
 		if directoryURL.absoluteString.compare(":memory:") != .orderedSame {
@@ -42,31 +43,35 @@ class SQLiteKeyValueStore {
 
 	/// Generates or Loads Database Key
 	/// Creates the K/V Datsbase if it is not already there
-	private func initDatabase(_ key: String, retry: Bool) {
+	private func initDatabase(_ key: SymmetricKey, retry: Bool) {
 		var noDatabaseAccess = false
 		databaseQueue?.inDatabase { db in
 			let dbhandle = OpaquePointer(db.sqliteHandle)
-			guard sqlite3_key(dbhandle, key, Int32(key.count)) == SQLITE_OK else {
-				logError(message: "Unable to set Key")
-				return
-			}
-			let sqlStmt = """
-			PRAGMA auto_vacuum=2;
+			key.withUnsafeBytes { rawBufferPointer -> Void in
+				let address = rawBufferPointer.baseAddress
+				let count = Int32(rawBufferPointer.count)
 
-			CREATE TABLE IF NOT EXISTS kv (
-				key TEXT UNIQUE,
-				value BLOB
-			);
-			"""
-			if !db.executeStatements(sqlStmt) {
-				noDatabaseAccess = true
+				guard sqlite3_key(dbhandle, address, count) == SQLITE_OK else {
+					logError(message: "Unable to set Key")
+					return
+				}
+				let sqlStmt = """
+				PRAGMA auto_vacuum=2;
+
+				CREATE TABLE IF NOT EXISTS kv (
+					key TEXT UNIQUE,
+					value BLOB
+				);
+				"""
+				if !db.executeStatements(sqlStmt) {
+					noDatabaseAccess = true
+				}
 			}
 		}
 		if noDatabaseAccess && !retry {
 			resetDatabase()
 			initDatabase(key, retry: true)
 		}
-
 	}
 
 	///Open Database Connection, set the Key and check if the Key/Value Table already exits.
@@ -135,7 +140,7 @@ class SQLiteKeyValueStore {
 	}
 
 	/// Removes all key/value pairs from the Store
-	func clearAll(key: String?) {
+	func clearAll(key: SymmetricKey?) {
 		openDbIfNeeded()
 		databaseQueue?.inDatabase { db in
 			let sqlStmt = """

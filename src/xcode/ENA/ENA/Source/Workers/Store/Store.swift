@@ -17,6 +17,7 @@
 
 import Foundation
 import ExposureNotification
+import CryptoKit
 
 enum EitherLowOrIncreasedRiskLevel: Int {
 	case low = 0
@@ -87,5 +88,5 @@ protocol Store: AnyObject {
 
 	var previousRiskLevel: EitherLowOrIncreasedRiskLevel? { get set }
 
-	func clearAll(key: String?)
+	func clearAll(key: SymmetricKey?)
 }

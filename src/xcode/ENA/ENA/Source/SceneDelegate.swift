@@ -18,6 +18,7 @@
 import BackgroundTasks
 import ExposureNotification
 import UIKit
+import CryptoKit
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate, RequiresAppDependencies {
 	// MARK: Properties
@@ -318,8 +319,9 @@ extension SceneDelegate: ENAExposureManagerObserver {
 extension SceneDelegate: HomeViewControllerDelegate {
 	/// Resets all stores and notifies the Onboarding.
 	func homeViewControllerUserDidRequestReset(_: HomeViewController) {
-		let newKey = KeychainHelper.generateDatabaseKey()
-		store.clearAll(key: newKey)
+		let passwordStore = GenericPasswordStore()
+		let key: SymmetricKey? = try? passwordStore.readKey(account: "secureStoreDatabaseKey")
+		store.clearAll(key: key)
 		UIApplication.coronaWarnDelegate().downloadedPackagesStore.reset()
 		exposureManager.reset {
 			self.exposureManager.resume(observer: self)
