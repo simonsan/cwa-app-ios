@@ -88,4 +88,6 @@ protocol Store: AnyObject {
 	var previousRiskLevel: EitherLowOrIncreasedRiskLevel? { get set }
 
 	func clearAll(key: String?)
+
+	func getStatus() -> DatabaseStatus
 }

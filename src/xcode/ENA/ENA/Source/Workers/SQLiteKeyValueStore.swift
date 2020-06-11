@@ -18,10 +18,17 @@
 import FMDB
 import Foundation
 
+enum DatabaseStatus {
+	case normal
+	case reset
+	case error
+}
+
 /// Basic SQLite Key/Value store with Keys as `TEXT` and Values stored as `BLOB`
 class SQLiteKeyValueStore {
 	private let databaseQueue: FMDatabaseQueue?
 	private let directoryURL: URL
+	var databaseStatus: DatabaseStatus = .normal
 
 	/// - parameter url: URL on disk where the FMDB should be initialized
 	/// If any part of the init fails no Datbase will be created
@@ -64,7 +71,11 @@ class SQLiteKeyValueStore {
 		}
 		if noDatabaseAccess && !retry {
 			resetDatabase()
+			databaseStatus = .reset
 			initDatabase(key, retry: true)
+		} else if noDatabaseAccess {
+			databaseStatus = .error
+			fatalError("Can't access Database")
 		}
 
 	}

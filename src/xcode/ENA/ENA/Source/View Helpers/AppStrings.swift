@@ -552,4 +552,7 @@ enum AppStrings {
 		static let termsText = NSLocalizedString("App_Information_Terms_Text", comment: "")
 	}
 
+	enum DatabaseError {
+		static let errorMessage = NSLocalizedString("Database_Error_Message", comment: "")
+	}
 }

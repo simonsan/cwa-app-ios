@@ -24,6 +24,7 @@ final class MockTestStore: Store {
 	var tracingStatusHistory: TracingStatusHistory = []
 	var testResultReceivedTimeStamp: Int64?
 	func clearAll(key: String?) {}
+	func getStatus() -> DatabaseStatus { return DatabaseStatus.normal }
 	var hasSeenSubmissionExposureTutorial: Bool = false
 	var lastSuccessfulSubmitDiagnosisKeyTimestamp: Int64?
 	var numberOfSuccesfulSubmissions: Int64?

@@ -147,6 +147,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, RequiresAppDepend
 		window?.rootViewController = navigationController
 		window?.makeKeyAndVisible()
 		appUpdateChecker.checkAppVersionDialog(for: window?.rootViewController)
+		checkDatabaseStatus(for: window?.rootViewController)
 	}
 
 	private func setupNavigationBarAppearance() {
@@ -386,4 +387,27 @@ private var currentDetectionMode: DetectionMode {
 	let backgroundRefreshStatus = UIApplication.shared.backgroundRefreshStatus
 	let detectionMode = DetectionMode.from(backgroundStatus: backgroundRefreshStatus)
 	return detectionMode
+}
+
+// MARK: Check Database Status
+/// Checks database status to give the user an info if the database was reset
+extension SceneDelegate {
+	private func checkDatabaseStatus(for vc: UIViewController?) {
+ 		if store.getStatus() == .reset {
+			let alert = UIAlertController(
+				title: AppStrings.Common.alertTitleGeneral,
+				message: AppStrings.DatabaseError.errorMessage,
+				preferredStyle: .alert
+			)
+			alert.addAction(UIAlertAction(
+				title: AppStrings.Common.alertActionOk,
+				style: .cancel,
+				handler: { _ in
+					alert.dismiss(animated: true, completion: nil)
+				})
+			)
+
+			vc?.present(alert, animated: true)
+		}
+	}
 }

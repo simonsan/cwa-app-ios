@@ -851,3 +851,5 @@
 
 "Update_Message_Action_Later" = "Später";
 
+/* Database Error */
+"Database Error_Message" = "Die Daten konnten leider nicht gelesen werden, daher wurde die App zurückgesetzt";

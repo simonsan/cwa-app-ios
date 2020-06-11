@@ -30,6 +30,10 @@ final class SecureStore: Store {
 		kvStore = SQLiteKeyValueStore(with: directoryURL, key: key)
 	}
 
+	func getStatus() -> DatabaseStatus {
+		return kvStore.databaseStatus
+	}
+
 	func flush() {
 		kvStore.flush()
 	}
