@@ -29,7 +29,7 @@ struct GenericPasswordStore {
         // Treat the key data as a generic password.
         let query = [kSecClass: kSecClassGenericPassword,
                      kSecAttrAccount: account,
-                     kSecAttrAccessible: kSecAttrAccessibleWhenUnlocked,
+                     kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
                      kSecUseDataProtectionKeychain: true,
                      kSecValueData: key.rawRepresentation] as [String: Any]
 
