@@ -30,6 +30,11 @@ final class SecureStore: Store {
 		kvStore = SQLiteKeyValueStore(with: directoryURL, key: key)
 	}
 
+	init(with kvStore: SQLiteKeyValueStore, at directoryURL: URL) {
+		self.directoryURL = directoryURL
+		self.kvStore = kvStore
+	}
+
 	func flush() {
 		kvStore.flush()
 	}

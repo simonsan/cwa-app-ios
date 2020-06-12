@@ -89,3 +89,7 @@ protocol Store: AnyObject {
 
 	func clearAll(key: String?)
 }
+
+protocol QueuedStore: Store {
+	func inTransaction(completion: (Store) -> Void)
+}
