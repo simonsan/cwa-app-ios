@@ -860,6 +860,9 @@
 
 "Update_Message_Action_Later" = "Later";
 
+/* Database Error */
+"Database Error_Message" = "Local data could not be read. Therfore the data had to be reset.";
+
 /* ENATanInput*/
 "ENATanInput_Empty" = "Empty";
 
